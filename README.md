@@ -1,0 +1,2 @@
+# chessex
+Chess explorer project
