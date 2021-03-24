@@ -10,9 +10,10 @@ func TestPGN(t *testing.T) {
 	require := require.New(t)
 
 	tests := []struct {
-		title    string
-		pgn      string
-		expected *PGN
+		title          string
+		pgn            string
+		expected       *PGN
+		expectedString string
 	}{
 		{
 			"Smallest PGN string",
@@ -29,15 +30,14 @@ func TestPGN(t *testing.T) {
 				Moves: []*MovePair{
 					&MovePair{
 						Number: "1.",
-						White: &Move{
-							Value:      "e4",
-							Check:      nil,
-							Annotation: nil,
-						},
+						White:  pString("e4"),
 					},
 				},
 				Outcome: "1/2-1/2",
 			},
+			`[Event "F/S Return Match"]
+
+1. e4 1/2-1/2`,
 		},
 	}
 
@@ -46,7 +46,13 @@ func TestPGN(t *testing.T) {
 			computed := &PGN{}
 			err := parser.ParseString("", test.pgn, computed)
 			require.NoError(err)
-			require.Equal(computed, test.expected)
+			require.Equal(test.expected, computed)
+			require.Equal(test.expectedString, computed.String())
 		})
 	}
+}
+
+func pString(s string) (sr *string) {
+	sr = &s
+	return sr
 }

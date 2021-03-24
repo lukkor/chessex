@@ -25,3 +25,9 @@ extract as much information as possible from the Portable Game Notation
 ([PGN](https://en.wikipedia.org/wiki/Portable_Game_Notation)). It is possible
 with a regurlar expression but after looking into it, I wanted to work on
 parsing the notation with lexical analysis (refreshing old memories).
+
+I used the [alecthomas/participle](https://github.com/alecthomas/participle)
+library which provides "a simple, idiomatic and elegant way of defining parsers
+in Go".
+
+You can find anything related to PGN parsing into `chessex/pgn.go` file.

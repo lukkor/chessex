@@ -1,2 +1,2 @@
-CREATE TABLE IF NOT EXISTS games (played_on DATE PRIMARY KEY, movetext VARCHAR)
-WITH COMPACTION = {'class': 'TimeWindowCompactionStrategy', 'max_sstable_age_days': 1};
+CREATE TABLE IF NOT EXISTS games (opening text, outcome text, tags map<text, text>, raw text, PRIMARY KEY (opening, outcome))
+WITH COMPACTION = {'class': 'SizeTieredCompactionStrategy'};

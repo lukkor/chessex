@@ -3,6 +3,6 @@
                 "hosts": ["127.0.0.1:9042", "127.0.0.1:9043", "127.0.0.1:9044"]
         },
         "loader": {
-                "archive": "/home/ludovic/Downloads/lichess_db_standard_rated_2019-11.pgn.bz2"
+                "archive": "archive/lichess_db_standard_rated_2019-11.pgn.bz2"
         }
 }

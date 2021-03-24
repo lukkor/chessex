@@ -61,44 +61,37 @@ func (t Tag) String() string {
 }
 
 type MovePair struct {
-	Number string `@Number `
-	White  *Move  `@@? `
-	Black  *Move  `@@?`
+	Number string  `@Number `
+	White  *string `( @Move | @Castle | @NullMove )?`
+	Black  *string `( @Move | @Castle | @NullMove )?`
 }
 
 func (mp *MovePair) String() string {
-	return fmt.Sprintf("%s %s %s", mp.Number, mp.White, mp.Black)
-}
-
-type Annotation string
-
-const (
-	Good        Annotation = "!"
-	Excellent              = "!!"
-	Mistake                = "?"
-	Blunder                = "??"
-	Interesting            = "!?"
-	Dubious                = "?!"
-)
-
-type Move struct {
-	Value      string      `( @Move | @Castle | @NullMove )`
-	Check      *string     `( @Check )?`
-	Annotation *Annotation `( @Annotation )?`
-}
-
-func (m *Move) String() string {
-	check := ""
-	if m.Check != nil {
-		check = *m.Check
+	white := ""
+	if mp.White != nil {
+		white = fmt.Sprintf(" %s", *mp.White)
 	}
 
-	annotation := ""
-	if m.Annotation != nil {
-		annotation = string(*m.Annotation)
+	black := ""
+	if mp.Black != nil {
+		white = fmt.Sprintf(" %s", *mp.Black)
 	}
 
-	return fmt.Sprintf("%s%s%s", m.Value, check, annotation)
+	return fmt.Sprintf("%s%s%s", mp.Number, white, black)
+}
+
+func NewParser() (*participle.Parser, error) {
+	parser, err := participle.Build(
+		&PGN{},
+		participle.Lexer(pgnLexer),
+		participle.Unquote("String"),
+		participle.Elide("inlineComment"),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return parser, nil
 }
 
 var (
@@ -112,25 +105,12 @@ var (
 		// Movetext
 		{"Outcome", `(?:1-0|0-1|1/2-1/2|\*)`, nil},
 		{"Number", `\d+\.*`, nil},
+		{"Move", `[a-h1-8PNBRQK=x+#!?]+`, nil},
+		{"Castle", `(?:O-O-O|O-O)[+#!?]*`, nil},
 		{"NullMove", `--`, nil},
-		{"Move", `[a-h1-8PNBRQK=x]+`, nil},
-		{"Castle", `(?:O-O|O-O-O)`, nil},
-		{"Check", `[+#]`, nil},
-		{"Annotation", `[?!]+`, nil},
-		{"Capture", `x`, nil},
-		{"Dot", `\.`, nil},
-		{"Slash", `/`, nil},
-		{"Dash", `-`, nil},
 
 		{"inlineComment", `{[^}]*}`, nil},
 		{"comment", `;[^\n]*\n?`, nil},
 		{"whitespace", `[ \n\r]+`, nil},
 	})
-
-	parser = participle.MustBuild(
-		&PGN{},
-		participle.Lexer(pgnLexer),
-		participle.Unquote("String"),
-		participle.Elide("inlineComment"),
-	)
 )

@@ -88,6 +88,10 @@ func (s *Service) Stop() {
 	close(s.stop)
 	s.wg.Wait()
 
+	if s.Loader != nil {
+		s.Loader.Stop()
+	}
+
 	s.Scylla.Close()
 
 	s.Log.Info().Msg("service stopped")

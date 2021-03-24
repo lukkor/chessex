@@ -1,14 +1,10 @@
 package chessex
 
 import (
-	"bufio"
-	"compress/bzip2"
 	"fmt"
-	"io"
-	"os"
-	"regexp"
-	"time"
+	"sync"
 
+	"github.com/alecthomas/participle/v2"
 	"github.com/rs/zerolog"
 )
 
@@ -21,6 +17,12 @@ type Loader struct {
 	Log zerolog.Logger
 
 	Chessex *Service
+
+	parser *participle.Parser
+	stop   chan struct{}
+	wg     sync.WaitGroup
+
+	games chan *PGN
 }
 
 func NewDefaultLoaderCfg() *LoaderCfg {
@@ -35,87 +37,82 @@ func NewLoader(service *Service) *Loader {
 		Log: service.Log.With().Str("component", "loader").Logger(),
 
 		Chessex: service,
+
+		stop: make(chan struct{}),
 	}
 }
 
 func (l *Loader) Start() error {
 	l.Log.Info().Str("archive", l.Cfg.Archive).Msg("start loading archive...")
 
-	go func() {
-		if err := l.Load(); err != nil {
-			l.Chessex.Die(err)
-		}
+	parser, err := NewParser()
+	if err != nil {
+		return fmt.Errorf("cannot create parser: %w", err)
+	}
 
-		t := time.NewTimer(2 * time.Second)
-		defer t.Stop()
+	l.parser = parser
 
-		select {
-		case <-t.C:
-			l.Chessex.Term()
-		}
-	}()
+	if err := l.Load(); err != nil {
+		l.Chessex.Die(err)
+	}
 
 	return nil
 }
 
 func (l *Loader) Load() error {
-	// Open the archive
-	file, err := os.Open(l.Cfg.Archive)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+	l.games = make(chan *PGN, 1)
 
-	// Create an unzip stream reader
-	r := bzip2.NewReader(file)
-
-	// Scan for each game in the stream reader
-	scanner := newGameScanner(r)
-	i := 0
-	for scanner.Scan() {
-		pgn := &PGN{}
-		text := scanner.Text()
-		err := parser.ParseString("", text, pgn)
+	go func() {
+		archive, err := NewArchive(l.Cfg.Archive)
 		if err != nil {
-			return fmt.Errorf("%s %w", text, err)
+			l.Chessex.Die(err)
+		}
+		defer archive.Close()
+
+		l.Log.Info().Msg("parser starting...")
+
+		for archive.Scan() {
+			pgn := &PGN{}
+
+			err = l.parser.ParseString("", archive.Text(), pgn)
+			if err != nil {
+				l.Log.Error().Err(err).Msg("cannot parse game")
+			}
+
+			l.games <- pgn
 		}
 
-		l.Log.Info().Interface("game", pgn.String()).Send()
+		l.games <- nil
+	}()
 
-		if i == 5 {
-			break
-		}
-
-		i++
-	}
-	if err := scanner.Err(); err != nil {
-		return err
-	}
+	l.wg.Add(1)
+	go l.loop()
 
 	return nil
 }
 
-func newGameScanner(r io.Reader) *bufio.Scanner {
-	scanner := bufio.NewScanner(r)
-	scanner.Split(splitGame)
+func (l *Loader) Stop() {
+	close(l.stop)
+	l.wg.Wait()
 
-	return scanner
+	l.Log.Info().Msg("loader stopped")
 }
 
-func splitGame(data []byte, atEOF bool) (advance int, token []byte, err error) {
-	endOfGame := regexp.MustCompile(`[\r\n]{2}\[`)
+func (l *Loader) loop() {
+	defer l.wg.Done()
 
-	if len(data) == 0 {
-		return 0, nil, nil
+	for {
+		select {
+		case <-l.stop:
+			return
+
+		case game := <-l.games:
+			if game == nil {
+				l.Chessex.Term()
+				return
+			}
+
+			l.Log.Info().Str("game", game.String()).Send()
+		}
 	}
-
-	if loc := endOfGame.FindIndex(data); loc != nil && loc[0] >= 0 {
-		return loc[1], data[0:loc[0]], nil
-	}
-
-	if atEOF {
-		return len(data), data, io.EOF
-	}
-
-	return 0, nil, nil
 }
