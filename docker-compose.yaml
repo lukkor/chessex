@@ -9,7 +9,8 @@ services:
     volumes:
       - "./scylla/scylla.yaml:/etc/scylla/scylla.yaml"
       - "./scylla/cassandra-rackdc.properties.dc1:/etc/scylla/cassandra-rackdc.properties"
-      - "./scylla/mutant-data.txt:/mutant-data.txt"
+      - "node1-data:/var/lib/scylla/data"
+      - "node1-commitlog:/var/lib/scylla/commitlog"
     ports:
       - "9042:9042"
     networks:
@@ -22,6 +23,8 @@ services:
     volumes:
       - "./scylla/scylla.yaml:/etc/scylla/scylla.yaml"
       - "./scylla/cassandra-rackdc.properties.dc1:/etc/scylla/cassandra-rackdc.properties"
+      - "node2-data:/var/lib/scylla/data"
+      - "node2-commitlog:/var/lib/scylla/commitlog"
     ports:
       - "9043:9042"
     networks:
@@ -34,6 +37,8 @@ services:
     volumes:
       - "./scylla/scylla.yaml:/etc/scylla/scylla.yaml"
       - "./scylla/cassandra-rackdc.properties.dc1:/etc/scylla/cassandra-rackdc.properties"
+      - "node3-data:/var/lib/scylla/data"
+      - "node3-commitlog:/var/lib/scylla/commitlog"
     ports:
       - "9044:9042"
     networks:
@@ -42,3 +47,11 @@ services:
 networks:
   web:
     driver: bridge
+
+volumes:
+  node1-data:
+  node1-commitlog:
+  node2-data:
+  node2-commitlog:
+  node3-data:
+  node3-commitlog:
