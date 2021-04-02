@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/alecthomas/participle/v2"
+	"github.com/gocql/gocql"
 	"github.com/rs/zerolog"
 )
 
@@ -112,7 +113,12 @@ func (l *Loader) loop() {
 				return
 			}
 
-			l.Log.Info().Str("game", game.String()).Send()
+			l.Chessex.Scylla.WithSession(func(session *gocql.Session) {
+				err := game.Insert(session)
+				if err != nil {
+					l.Log.Error().Err(err).Msg("cannot insert game")
+				}
+			})
 		}
 	}
 }

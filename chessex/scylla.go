@@ -29,6 +29,8 @@ type ScyllaClient struct {
 	session *gocql.Session
 }
 
+type sessionFunc func(*gocql.Session)
+
 func NewDefaultScyllaCfg() *ScyllaCfg {
 	return &ScyllaCfg{
 		Hosts: []string{"127.0.0.1:9042", "127.0.0.1:9043", "127.0.0.1:9044"},
@@ -56,6 +58,10 @@ func NewScyllaClient(service *Service) (*ScyllaClient, error) {
 
 func (sc *ScyllaClient) Close() {
 	sc.session.Close()
+}
+
+func (sc *ScyllaClient) WithSession(f sessionFunc) {
+	f(sc.session)
 }
 
 func (sc *ScyllaClient) UpdateSchema() error {

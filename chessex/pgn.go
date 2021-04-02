@@ -13,11 +13,34 @@
 package chessex
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"strings"
 
 	"github.com/alecthomas/participle/v2"
 	"github.com/alecthomas/participle/v2/lexer/stateful"
+	"github.com/gocql/gocql"
+)
+
+var (
+	pgnLexer = stateful.MustSimple([]stateful.Rule{
+		// Tags
+		{"Tag", `Event|Site|Date|Round|Result|WhiteTitle|BlackTitle|WhiteElo|BlackElo|WhiteUSCF|BlackUSCF|WhiteNA|BlackNA|WhiteType|BlackType|EventDate|EventSponsor|Section|Stage|Board|Opening|Variation|SubVariation|ECO|NIC|UTCTime|UTCDate|TimeControl|Time|SetUp|FEN|Termination|Annotator|Mode|PlyCount|Elo|WhiteRatingDiff|BlackRatingDiff|White|Black`, nil},
+		{"String", `"(?:\\.|[^"])*"`, nil},
+		{"LBracket", `\[`, nil},
+		{"RBracket", `\]`, nil},
+
+		// Movetext
+		{"Outcome", `(?:1-0|0-1|1/2-1/2|\*)`, nil},
+		{"Number", `\d+\.*`, nil},
+		{"Move", `[a-h1-8PNBRQK=x+#!?]+`, nil},
+		{"Castle", `(?:O-O-O|O-O)[+#!?]*`, nil},
+		{"NullMove", `--`, nil},
+
+		{"inlineComment", `{[^}]*}`, nil},
+		{"comment", `;[^\n]*\n?`, nil},
+		{"whitespace", `[ \n\r]+`, nil},
+	})
 )
 
 type PGN struct {
@@ -74,7 +97,7 @@ func (mp *MovePair) String() string {
 
 	black := ""
 	if mp.Black != nil {
-		white = fmt.Sprintf(" %s", *mp.Black)
+		black = fmt.Sprintf(" %s", *mp.Black)
 	}
 
 	return fmt.Sprintf("%s%s%s", mp.Number, white, black)
@@ -94,23 +117,25 @@ func NewParser() (*participle.Parser, error) {
 	return parser, nil
 }
 
-var (
-	pgnLexer = stateful.MustSimple([]stateful.Rule{
-		// Tags
-		{"Tag", `Event|Site|Date|Round|Result|WhiteTitle|BlackTitle|WhiteElo|BlackElo|WhiteUSCF|BlackUSCF|WhiteNA|BlackNA|WhiteType|BlackType|EventDate|EventSponsor|Section|Stage|Board|Opening|Variation|SubVariation|ECO|NIC|UTCTime|UTCDate|TimeControl|Time|SetUp|FEN|Termination|Annotator|Mode|PlyCount|Elo|WhiteRatingDiff|BlackRatingDiff|White|Black`, nil},
-		{"String", `"(?:\\.|[^"])*"`, nil},
-		{"LBracket", `\[`, nil},
-		{"RBracket", `\]`, nil},
+func (pgn *PGN) Insert(session *gocql.Session) error {
+	query := `INSERT INTO games_by_opening (id, opening, outcome, tags, raw) VALUES (?, ?, ?, ?, ?)`
 
-		// Movetext
-		{"Outcome", `(?:1-0|0-1|1/2-1/2|\*)`, nil},
-		{"Number", `\d+\.*`, nil},
-		{"Move", `[a-h1-8PNBRQK=x+#!?]+`, nil},
-		{"Castle", `(?:O-O-O|O-O)[+#!?]*`, nil},
-		{"NullMove", `--`, nil},
+	if len(pgn.Moves) == 0 {
+		return fmt.Errorf("cannot insert game without opening (0 move)")
+	}
 
-		{"inlineComment", `{[^}]*}`, nil},
-		{"comment", `;[^\n]*\n?`, nil},
-		{"whitespace", `[ \n\r]+`, nil},
-	})
-)
+	if pgn.Moves[0].White == nil {
+		return fmt.Errorf("cannot insert game without opening (white nil)")
+	}
+
+	opening := pgn.Moves[0].White
+
+	tags := map[string]string{}
+	for _, tag := range pgn.Tags {
+		tags[tag.Name] = tag.Value
+	}
+
+	id := sha256.Sum256([]byte(pgn.String()))
+
+	return session.Query(query, id[:], opening, pgn.Outcome, tags, pgn.String()).Exec()
+}
