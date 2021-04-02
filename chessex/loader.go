@@ -10,7 +10,8 @@ import (
 )
 
 type LoaderCfg struct {
-	Archive string `json:"archive"`
+	Archive        string `json:"archive"`
+	WorkerPoolSize int    `json:"workerPoolSize"`
 }
 
 type Loader struct {
@@ -61,7 +62,7 @@ func (l *Loader) Start() error {
 }
 
 func (l *Loader) Load() error {
-	l.games = make(chan *PGN, 1)
+	l.games = make(chan *PGN)
 
 	go func() {
 		archive, err := NewArchive(l.Cfg.Archive)
@@ -83,8 +84,13 @@ func (l *Loader) Load() error {
 			l.games <- pgn
 		}
 
-		l.games <- nil
+		l.Chessex.Term()
 	}()
+
+	for range make([]struct{}, l.Cfg.WorkerPoolSize) {
+		l.wg.Add(1)
+		go l.worker()
+	}
 
 	l.wg.Add(1)
 	go l.loop()
@@ -99,6 +105,24 @@ func (l *Loader) Stop() {
 	l.Log.Info().Msg("loader stopped")
 }
 
+func (l *Loader) worker() {
+	defer l.wg.Done()
+
+	for {
+		select {
+		case <-l.stop:
+			return
+		case game := <-l.games:
+			l.Chessex.Scylla.WithSession(func(session *gocql.Session) {
+				err := game.Insert(session)
+				if err != nil {
+					l.Log.Error().Err(err).Msg("cannot insert game")
+				}
+			})
+		}
+	}
+}
+
 func (l *Loader) loop() {
 	defer l.wg.Done()
 
@@ -106,19 +130,6 @@ func (l *Loader) loop() {
 		select {
 		case <-l.stop:
 			return
-
-		case game := <-l.games:
-			if game == nil {
-				l.Chessex.Term()
-				return
-			}
-
-			l.Chessex.Scylla.WithSession(func(session *gocql.Session) {
-				err := game.Insert(session)
-				if err != nil {
-					l.Log.Error().Err(err).Msg("cannot insert game")
-				}
-			})
 		}
 	}
 }
