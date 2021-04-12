@@ -81,6 +81,10 @@ func (l *Loader) Load() error {
 				l.Log.Error().Err(err).Msg("cannot parse game")
 			}
 
+			if pgn.Outcome == "*" {
+				continue
+			}
+
 			l.games <- pgn
 		}
 
@@ -114,7 +118,7 @@ func (l *Loader) worker() {
 			return
 		case game := <-l.games:
 			l.Chessex.Scylla.WithSession(func(session *gocql.Session) {
-				err := game.Insert(session)
+				err := game.InsertDepth(session, 3)
 				if err != nil {
 					l.Log.Error().Err(err).Msg("cannot insert game")
 				}

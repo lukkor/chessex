@@ -1,5 +1,15 @@
 # chessex
 
+## Getting started
+
+Create the `chessex` keyspace in ScyllaDB:
+
+```
+$ docker-compose up -d
+$ docker exec -it chessex_scylla-node3_1 cqlsh
+cqlsh> CREATE KEYSPACE chessex WITH replication = {'class': 'SimpleStrategy', 'replication_factor' : 3};
+```
+
 ## Why?
 
 A personal project to learn more about part of the future stack I'll work with,

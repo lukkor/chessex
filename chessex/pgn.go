@@ -13,7 +13,6 @@
 package chessex
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"strings"
 
@@ -44,9 +43,9 @@ var (
 )
 
 type PGN struct {
-	Tags    []*Tag      `@@*`
-	Moves   []*MovePair `@@*`
-	Outcome string      `@Outcome`
+	Tags    []*Tag `@@*`
+	Moves   Moves  `@@*`
+	Outcome string `@Outcome`
 }
 
 func (pgn *PGN) String() string {
@@ -64,14 +63,24 @@ func (pgn *PGN) String() string {
 		panic(err)
 	}
 
-	for _, move := range pgn.Moves {
+	s.WriteString(pgn.Moves.String())
+
+	return fmt.Sprintf("%s%s", s.String(), pgn.Outcome)
+}
+
+type Moves []*MovePair
+
+func (m Moves) String() string {
+	var s strings.Builder
+
+	for _, move := range m {
 		_, err := s.WriteString(fmt.Sprintf("%s ", move))
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	return fmt.Sprintf("%s%s", s.String(), pgn.Outcome)
+	return s.String()
 }
 
 type Tag struct {
@@ -117,8 +126,8 @@ func NewParser() (*participle.Parser, error) {
 	return parser, nil
 }
 
-func (pgn *PGN) Insert(session *gocql.Session) error {
-	query := `INSERT INTO games_by_opening (id, opening, outcome, tags, raw) VALUES (?, ?, ?, ?, ?)`
+func (pgn *PGN) InsertDepth(session *gocql.Session, depth int) error {
+	query := `UPDATE games_by_moves SET count = count + 1 WHERE moves = ? AND outcome = ?`
 
 	if len(pgn.Moves) == 0 {
 		return fmt.Errorf("cannot insert game without opening (0 move)")
@@ -128,14 +137,19 @@ func (pgn *PGN) Insert(session *gocql.Session) error {
 		return fmt.Errorf("cannot insert game without opening (white nil)")
 	}
 
-	opening := pgn.Moves[0].White
-
-	tags := map[string]string{}
-	for _, tag := range pgn.Tags {
-		tags[tag.Name] = tag.Value
+	max := depth
+	if max > len(pgn.Moves) {
+		max = len(pgn.Moves)
 	}
 
-	id := sha256.Sum256([]byte(pgn.String()))
+	for i := 1; i <= max; i++ {
+		moves := pgn.Moves[:i]
 
-	return session.Query(query, id[:], opening, pgn.Outcome, tags, pgn.String()).Exec()
+		err := session.Query(query, moves.String(), pgn.Outcome).Exec()
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
